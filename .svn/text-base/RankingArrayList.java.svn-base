@@ -1,0 +1,398 @@
+package com.f4.owl.ranking;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+public class RankingArrayList
+        extends RankingAbstract
+{
+    //constructor
+    public RankingArrayList()
+    {
+        _playerArray = new ArrayList<Player>();
+    }
+
+    //updates - inserts
+    @Override
+    public void updateRankingReplace( @NotNull final Long playerId, @NotNull final Integer playerScore )
+    {
+        _readWriteLock.writeLock().lock();
+        int i = 0;
+        final Player player = new Player( playerId, playerScore );
+        try
+        {
+            final int indicePlayerInArray = indexPlayerInArray( playerId );
+            final Comparator<Player> comp = getComparator();
+            if( indicePlayerInArray != -1 )
+            {
+                _playerArray.remove( indicePlayerInArray );
+            }
+
+            while( ( i < _playerArray.size() ) &&
+                    ( comp.compare( player, _playerArray.get( i ) ) > 0 ) )
+            {
+                i++;
+            }
+            _playerArray.add( i, player );
+        }
+        finally
+        {
+            _readWriteLock.writeLock().unlock();
+            writeData( playerId, player.getPlayerScore() );
+        }
+    }
+
+    @Override
+    public void updateRankingSum( @NotNull final Long playerId, @NotNull final Integer playerScore )
+    {
+        _readWriteLock.writeLock().lock();
+        final Player player = new Player( playerId, playerScore );
+        final int oldScore;
+        int i = 0;
+        final int indicePlayerInArray = indexPlayerInArray( playerId );
+
+        try
+        {
+            final Comparator<Player> comp = getComparator();
+            if( indicePlayerInArray != -1 )
+            {
+                oldScore = _playerArray.get( indicePlayerInArray ).getPlayerScore();
+                player.setPlayerScore( oldScore + playerScore );
+                _playerArray.remove( indicePlayerInArray );
+            }
+
+            while( ( i < _playerArray.size() ) &&
+                    ( comp.compare( player, _playerArray.get( i ) ) > 0 ) )
+            {
+                i++;
+            }
+            _playerArray.add( i, player );
+        }
+        finally
+        {
+            _readWriteLock.writeLock().unlock();
+            writeData( playerId, player.getPlayerScore() );
+        }
+    }
+
+    @Override
+    public void updateRankingBetter( @NotNull final Long playerId, @NotNull final Integer playerScore )
+    {
+        int i = 0;
+        _readWriteLock.writeLock().lock();
+        final Player player = new Player( playerId, playerScore );
+        final int indicePlayerInArray = indexPlayerInArray( playerId );
+
+        try
+        {
+            final Comparator<Player> comp = getComparator();
+            if( indicePlayerInArray != -1 )
+            {
+                if( comp.compare( player, _playerArray.get( indicePlayerInArray ) ) > 0 )
+                {
+                    return;
+                }
+                else
+                {
+                    _playerArray.remove( indicePlayerInArray );
+                }
+            }
+
+            while( ( i < _playerArray.size() ) &&
+                    ( comp.compare( player, _playerArray.get( i ) ) > 0 ) )
+            {
+                i++;
+            }
+            _playerArray.add( i, player );
+        }
+        finally
+        {
+            _readWriteLock.writeLock().unlock();
+            writeData( playerId, player.getPlayerScore() );
+        }
+    }
+
+    //delete
+    @Override
+    public void deletePlayer( @NotNull final Long playerId )
+    {
+        _readWriteLock.writeLock().lock();
+        final int i = indexPlayerInArray( playerId );
+        try
+        {
+            if( i != -1 )
+            {
+                _playerArray.remove( i );
+                deleteData( playerId );
+            }
+        }
+        finally
+        {
+            _readWriteLock.writeLock().unlock();
+        }
+    }
+
+    //getters
+    @Nullable
+    @Override
+    public Integer getPlayerPosition( @NotNull final Long playerId )
+    {
+        int i;
+
+        _readWriteLock.readLock().lock();
+        try
+        {
+            for( i = 0; i < _playerArray.size(); i++ )
+            {
+                if( _playerArray.get( i ).getPlayerId().equals( playerId ) )
+                {
+                    return ( i + 1 );
+                }
+            }
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+        return ( null );
+    }
+
+    @Nullable
+    @Override
+    public Player getPlayerAtPosition( final int position )
+    {
+        _readWriteLock.readLock().lock();
+        try
+        {
+            if( ( position < 1 ) || ( position > _playerArray.size() ) )
+            {
+                return ( null );
+            }
+            else
+            {
+                return ( _playerArray.get( position - 1 ) );
+            }
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Nullable
+    @Override
+    public Integer getPlayerRank( @NotNull final Long playerId )
+    {
+        int i;
+        int j;
+        final Integer actualScore;
+
+        _readWriteLock.readLock().lock();
+        try
+        {
+            for( i = 0; i < _playerArray.size(); i++ )
+            {
+                if( _playerArray.get( i ).getPlayerId().equals( playerId ) )
+                {
+                    if( i == 0 )
+                    {
+                        return ( 1 );
+                    }
+                    actualScore = _playerArray.get( i ).getPlayerScore();
+                    j = i;
+                    while( ( j > 0 ) && _playerArray.get( j - 1 ).getPlayerScore().equals( actualScore ) )
+                    {
+                        j--;
+                    }
+                    return ( j + 1 );
+                }
+            }
+            return ( null );
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Nullable
+    @Override
+    public Integer getPlayerPage( @NotNull final Long playerId, final int avatarPerPage )
+    {
+        final Integer position = getPlayerPosition( playerId );
+
+        if( position == null )
+        {
+            return ( null );
+        }
+        else
+        {
+            return ( (int) ( Math.ceil( (double) position / (double) avatarPerPage ) ) );
+        }
+    }
+
+    @Nullable
+    @Override
+    public PlayerDTO getFirstPlayer()
+    {
+        _readWriteLock.readLock().lock();
+        try
+        {
+            final Player player = getPlayerAtPosition( 1 );
+            if( null != player )
+            {
+                final PlayerDTO playerDTO = new PlayerDTO();
+                playerDTO.setPlayer( player );
+                playerDTO.setPosition( getPlayerPosition( player.getPlayerId() ) );
+                playerDTO.setRank( getPlayerRank( player.getPlayerId() ) );
+                return ( playerDTO );
+            }
+            else
+            {
+                return ( null );
+            }
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Nullable
+    @Override
+    public List<PlayerDTO> getTopFivePlayers()
+    {
+        int i = 0;
+        _readWriteLock.readLock().lock();
+        try
+        {
+            final ArrayList<PlayerDTO> result = new ArrayList<PlayerDTO>();
+
+            for( final Player player : _playerArray )
+            {
+                if( ( player != null ) && ( i < 5 ) )
+                {
+                    final PlayerDTO playerDTO = new PlayerDTO();
+                    playerDTO.setPlayer( player );
+                    playerDTO.setPosition( getPlayerPosition( player.getPlayerId() ) );
+                    playerDTO.setRank( getPlayerRank( player.getPlayerId() ) );
+                    result.add( playerDTO );
+                }
+                else
+                {
+                    break;
+                }
+                i++;
+            }
+            return ( result );
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Override
+    public List<PlayerDTO> getPlayersBetween( @NotNull Integer n, @NotNull Integer m )
+    {
+        if( n < 1 )
+        {
+            n = 1;
+        }
+        if( m > _playerArray.size() )
+        {
+            m = _playerArray.size();
+        }
+        int i;
+        _readWriteLock.readLock().lock();
+        try
+        {
+            final ArrayList<PlayerDTO> result = new ArrayList<PlayerDTO>();
+            for( i = n - 1; i < m; i++ )
+            {
+                final PlayerDTO playerDTO = new PlayerDTO();
+                playerDTO.setPlayer( _playerArray.get( i ) );
+                playerDTO.setPosition( getPlayerPosition( _playerArray.get( i ).getPlayerId() ) );
+                playerDTO.setRank( getPlayerRank( _playerArray.get( i ).getPlayerId() ) );
+                result.add( playerDTO );
+            }
+            return ( result );
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Override
+    public List<PlayerDTO> getRankingPages( @NotNull final Integer page, @NotNull final Integer numberPerPage )
+    {
+        return ( getPlayersBetween( ( ( page - 1 ) * numberPerPage ) + 1, ( ( page - 1 ) * numberPerPage ) + numberPerPage ) );
+    }
+
+    @Override
+    public int getNumberOfPlayers()
+    {
+        return _playerArray.size();
+    }
+
+    //exist
+    public int indexPlayerInArray( @NotNull final Long playerId )
+    {
+        int i;
+
+        _readWriteLock.readLock().lock();
+        try
+        {
+            for( i = 0; i < _playerArray.size(); i++ )
+            {
+                if( _playerArray.get( i ).getPlayerId().equals( playerId ) )
+                {
+                    return ( i );
+                }
+            }
+            return ( -1 );
+        }
+        finally
+        {
+            _readWriteLock.readLock().unlock();
+        }
+    }
+
+    @Override
+    protected void clearDataInMemory()
+    {
+        _playerArray.clear();
+    }
+
+    @Override
+    protected void updateDataInMemory( @NotNull final List<Player> list )
+    {
+        for( final Player player : list )
+        {
+            updateRankingReplace( player.getPlayerId(), player.getPlayerScore() );
+        }
+    }
+
+    //attributs - constants
+    private final ArrayList<Player> _playerArray;
+
+/*
+    @Override
+    public String toString()
+    {
+        int i;
+        String ret = "";
+
+        for( i = 0; i < _playerArray.size(); i++ )
+        {
+            ret = ret + _playerArray.get( i ).toString() + '\n';
+        }
+        return ( '\n' + ret );
+    }
+*/
+}
